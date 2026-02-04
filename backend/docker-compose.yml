@@ -1,0 +1,88 @@
+services:
+  app:
+    image: laravel-docker-production-main-app:local
+    # build:
+    #   context: ./backend
+    #   dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - 9000:9000
+    depends_on:
+      - db
+    env_file:
+      - .env
+    volumes:
+      - storage:/usr/share/nginx/html/storage:rw
+      - public:/usr/share/nginx/html/public:rw
+    networks:
+    - backend-net
+  queue-worker:
+    image: laravel-docker-production-main-queue-worker:local
+    # build:
+    #   context: ./backend
+    #   dockerfile: Dockerfile
+    restart: unless-stopped
+    command: php artisan queue:work
+    environment:
+      IS_WORKER: "true"
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - storage:/usr/share/nginx/html/storage:rw
+      - public:/usr/share/nginx/html/public:rw
+    networks:
+    - backend-net
+  nginx:
+    image: nginx:1-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template
+      - storage:/usr/share/nginx/html/storage:rw
+      - public:/usr/share/nginx/html/public:ro
+    depends_on:
+      - app
+    networks:
+      - backend-net
+
+  db:
+    image: postgres:16.3
+    container_name: shamba_postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - backend-net  
+  redis:
+    image: redis:7-alpine
+    platform: linux/amd64
+    ports:
+      - 6379:6379
+    restart: always
+    volumes:
+      - redis-data:/bitnami/redis/data
+    environment:
+      - ALLOW_EMPTY_PASSWORD=no
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+
+volumes:
+  storage:
+  public:
+  db-data:
+  redis-data:
+networks:
+  backend-net:
+    driver: bridge
+
